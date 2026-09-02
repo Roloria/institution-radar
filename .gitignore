@@ -1,0 +1,8 @@
+# 运行产物与数据（勿提交）
+.venv/
+data/
+*.log
+nohup.out
+__pycache__/
+.DS_Store
+*.db
