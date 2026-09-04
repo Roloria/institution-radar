@@ -22,9 +22,9 @@ function fmtNum(v, digits = 2) {
   if (v == null) return "-";
   return Number(v).toLocaleString("zh-CN", { maximumFractionDigits: digits });
 }
-function fmtYi(v) { // 元 -> 亿元
+function fmtYi(v) { // 百万元 -> 亿元
   if (v == null) return "-";
-  return (v / 1e8).toFixed(2);
+  return (v / 100).toFixed(2);
 }
 function timeAgo(ts) {
   if (!ts) return "";
@@ -274,6 +274,8 @@ function consensusTable(items, kind) {
 }
 async function loadSignals() {
   const d = await api("/api/consensus");
+  d.buys = d.buys.slice(0, 25);
+  d.sells = d.sells.slice(0, 12);
   $("#sig-quarter").textContent = d.quarter + ` · 全部 ${d.n_all} 只标的出现机构调仓`;
   $("#sig-buys").innerHTML = consensusTable(d.buys, "买入");
   $("#sig-sells").innerHTML = consensusTable(d.sells, "卖出");
@@ -282,13 +284,13 @@ async function loadSignals() {
   // A 股今日关注：北向近5日 + 龙虎榜净买Top + 连板天梯
   const [hkt, bb, zt] = await Promise.all([api("/api/hkt?days=10"), api("/api/billboard"), api("/api/ztpool")]);
   const byDate = {};
-  hkt.forEach((r) => { if (r.mutual_type.startsWith("北向")) byDate[r.trade_date] = (byDate[r.trade_date] || 0) + (r.net_amt || 0) / 1e8; });
+  hkt.forEach((r) => { if (r.mutual_type.startsWith("南向")) byDate[r.trade_date] = (byDate[r.trade_date] || 0) + (r.net_amt || 0) / 100; });
   const days = Object.keys(byDate).sort().slice(-5);
   const north = days.map((d2) => `<div class="srow"><span>${d2.slice(5)}</span><span class="${byDate[d2] >= 0 ? "pos" : "neg"}" style="margin-left:auto">${byDate[d2] >= 0 ? "+" : ""}${byDate[d2].toFixed(1)} 亿</span></div>`).join("") || '<div class="empty">无数据</div>';
   const bbTop = bb.rows.slice(0, 8).map((r) => `<div class="srow"><span><b>${esc(r.name)}</b> <span class="muted mono">${esc(r.code)}</span></span><span class="${(r.net_amt || 0) >= 0 ? "pos" : "neg"}" style="margin-left:auto">${r.net_amt != null ? (r.net_amt > 0 ? "+" : "") + (r.net_amt / 1e4).toFixed(0) + " 万" : "-"}</span></div>`).join("") || '<div class="empty">无数据</div>';
   const ztTop = zt.rows.slice(0, 8).map((r) => `<div class="srow"><span><b>${esc(r.name)}</b> <span class="muted mono">${esc(r.code)}</span></span><span class="lbc" style="margin-left:auto;color:var(--red)">${r.lbc > 1 ? r.lbc + " 连板" : "首板"}</span></div>`).join("") || '<div class="empty">无数据</div>';
   $("#sig-domestic").innerHTML = `
-    <div><div class="hint" style="margin-bottom:8px">🌊 北向资金近 5 日净买</div>${north}</div>
+    <div><div class="hint" style="margin-bottom:8px">🌊 南向资金近 5 日净买</div>${north}</div>
     <div><div class="hint" style="margin-bottom:8px">🐉 龙虎榜净买 Top8（${esc(bb.date)}）</div>${bbTop}</div>
     <div><div class="hint" style="margin-bottom:8px">🔥 连板天梯（${esc(zt.date)}）</div>${ztTop}</div>`;
 }
@@ -350,22 +352,21 @@ async function loadHkt() {
   const rows = await api("/api/hkt?days=60");
   const byDate = {};
   rows.forEach((r) => {
-    if (!r.mutual_type.startsWith("北向")) return;
-    byDate[r.trade_date] = byDate[r.trade_date] || {};
-    byDate[r.trade_date][r.mutual_type] = r.net_amt;
+    if (!r.mutual_type.startsWith("南向")) return;
+    byDate[r.trade_date] = (byDate[r.trade_date] || 0) + (r.net_amt || 0) / 100;
   });
   const dates = Object.keys(byDate).sort().slice(-40);
-  const net = dates.map((d) => ((byDate[d]["北向沪股通"] || 0) + (byDate[d]["北向深股通"] || 0)) / 1e8);
+  const net = dates.map((d) => byDate[d]);
   if (D.hktChart) D.hktChart.destroy();
   D.hktChart = new Chart($("#hkt-chart"), {
     type: "bar",
-    data: { labels: dates.map((d) => d.slice(5)), datasets: [{ label: "北向净买入(亿)", data: net, backgroundColor: net.map((v) => (v >= 0 ? "rgba(34,197,94,.7)" : "rgba(239,68,68,.7)")), borderRadius: 3 }] },
+    data: { labels: dates.map((d) => d.slice(5)), datasets: [{ label: "南向净买入(亿)", data: net, backgroundColor: net.map((v) => (v >= 0 ? "rgba(34,197,94,.7)" : "rgba(239,68,68,.7)")), borderRadius: 3 }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: "#8b98ad", maxTicksLimit: 12 }, grid: { display: false } }, y: { ticks: { color: "#8b98ad" }, grid: { color: "#1f2a3d" } } } },
   });
   $("#hkt-table").innerHTML = `<table><thead><tr><th>日期</th><th>通道</th><th class="num">买入(亿)</th><th class="num">卖出(亿)</th><th class="num">净买(亿)</th></tr></thead><tbody>${
     rows.slice(0, 40).map((r) => `<tr><td>${esc(r.trade_date)}</td><td>${esc(r.mutual_type)}</td>
       <td class="num muted">${fmtYi(r.buy_amt)}</td><td class="num muted">${fmtYi(r.sell_amt)}</td>
-      <td class="num">${amtSpan(r.net_amt ? (r.net_amt > 0 ? 1 : -1) * Math.abs(r.net_amt) / 1e8 : null)}</td></tr>`).join("")}</tbody></table>`;
+      <td class="num">${amtSpan(r.net_amt ? (r.net_amt > 0 ? 1 : -1) * Math.abs(r.net_amt) / 100 : null)}</td></tr>`).join("")}</tbody></table>`;
 }
 
 const HOLDER_TYPES = ["社保基金", "QFII", "公募基金", "国家队", "保险资金", "北向资金", "私募", "券商", "信托", "其他"];

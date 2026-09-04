@@ -41,7 +41,7 @@ def build_snapshot() -> dict:
             "SELECT code,name,change_rate,net_amt,buy_amt,reason FROM dt_billboard WHERE trade_date=? "
             "ORDER BY ABS(COALESCE(net_amt,0)) DESC LIMIT 15", (bb_date,)))
         hkt_rows = store.rows_to_dicts(db.execute(
-            "SELECT trade_date, mutual_type, net_amt FROM hkt_flow WHERE mutual_type IN ('北向沪股通','北向深股通') "
+            "SELECT trade_date, mutual_type, net_amt FROM hkt_flow WHERE mutual_type IN ('南向沪港股通','南向深港股通') "
             "ORDER BY trade_date DESC LIMIT 60"))
         news_matched = store.rows_to_dicts(db.execute(
             "SELECT source,title,content,published_at,url,matched FROM news WHERE matched != '[]' "
@@ -58,9 +58,11 @@ def build_snapshot() -> dict:
 
     north = {}
     for r in hkt_rows:
-        if r["mutual_type"].startswith("北向"):
-            north[r["trade_date"]] = round(north.get(r["trade_date"], 0) + (r["net_amt"] or 0) / 1e8, 2)
+        if r["mutual_type"].startswith("南向"):
+            north[r["trade_date"]] = round(north.get(r["trade_date"], 0) + (r["net_amt"] or 0) / 100, 2)
     north = dict(sorted(north.items())[-40:])
+    if not north:
+        print("[static] 警告: 南向净买数据为空")
 
     return {
         "built_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -72,7 +74,7 @@ def build_snapshot() -> dict:
         "alerts": alerts,
         "billboard_date": bb_date,
         "billboard": billboard,
-        "north_net": north,
+        "south_net": north,
         "zt_date": zt_date,
         "zt": zt,
         "news_matched": news_matched,
@@ -150,7 +152,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:24px 0 0;bord
   <div class="panel"><h3>⚡ 机构关键词快讯</h3><div id="news"></div></div>
 </div>
 <div class="grid2">
-  <div class="panel"><h3>🌊 北向资金净买入（亿）</h3><div class="chart-box"><canvas id="hkt-chart"></canvas></div></div>
+  <div class="panel"><h3>🌊 南向资金净买入（亿）</h3><div class="chart-box"><canvas id="hkt-chart"></canvas></div></div>
   <div class="panel"><h3>🇨🇳 A 股动向 <span class="sub" id="cn-meta"></span></h3><div class="table-wrap" id="cn"></div></div>
 </div>
 <footer id="foot"></footer>
@@ -174,7 +176,7 @@ function consTable(items){
     <td class="num">${amtS(g.delta)}</td>
     <td style="max-width:330px;white-space:normal">${g.insts.slice(0,6).map(x=>`<span class="tag ${CT[x.change_type]||"n"}">${esc(x.name)}</span>`).join("")}</td></tr>`).join("")}</tbody></table>`;
 }
-fetch("./data/snapshot.json").then(r=>r.json()).then(d=>{
+fetch("./data/snapshot.json?t=__BUILD_TS__").then(r=>r.json()).then(d=>{
   $("#built").textContent = `快照生成于 ${d.built_at} · 本地实例持续自动更新`;
   $("#stats").innerHTML=`
     <div class="stat"><div class="k">跟踪机构</div><div class="v">${d.stats.insts}</div></div>
@@ -192,7 +194,7 @@ fetch("./data/snapshot.json").then(r=>r.json()).then(d=>{
     d.top_changes.map(c=>`<tr><td>${esc(c.name_cn)}</td><td>${esc(c.issuer)}${c.ticker?` <span class="muted mono">${esc(c.ticker)}</span>`:""}</td><td>${ctTag(c.change_type)}</td><td class="num">${amtS(c.delta_value)}</td></tr>`).join("")}</tbody></table>`;
   $("#alerts").innerHTML=d.alerts.map(a=>`<div class="alert-item ${a.level}"><div class="t">${esc(a.title)}</div><div class="d">${esc(a.detail)}</div><div class="d muted">${esc((a.ts||"").slice(0,16))}</div></div>`).join("")||'<div class="empty">暂无</div>';
   $("#news").innerHTML=d.news_matched.map(n=>`<div class="news-item"><div class="meta"><span class="src">${esc(n.source)}</span> · ${esc((n.published_at||"").slice(5,16))}</div><div>${esc((n.content||n.title).slice(0,120))}</div></div>`).join("")||'<div class="empty">暂无</div>';
-  const dates=Object.keys(d.north_net), vals=dates.map(x=>d.north_net[x]);
+  const dates=Object.keys(d.south_net), vals=dates.map(x=>d.south_net[x]);
   new Chart($("#hkt-chart"),{type:"bar",data:{labels:dates.map(x=>x.slice(5)),datasets:[{data:vals,backgroundColor:vals.map(v=>v>=0?"rgba(34,197,94,.7)":"rgba(239,68,68,.7)"),borderRadius:3}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#8b98ad",maxTicksLimit:10},grid:{display:false}},y:{ticks:{color:"#8b98ad"},grid:{color:"#1f2a3d"}}}}});
   $("#cn-meta").textContent=`龙虎榜 ${d.billboard_date} · 涨停 ${d.zt_date}`;
   $("#cn").innerHTML=`<table><thead><tr><th>龙虎榜净买</th><th class="num">净额(万)</th><th>连板</th></tr></thead><tbody>${
@@ -211,7 +213,8 @@ def main():
     (SITE / "data").mkdir(exist_ok=True)
     with open(SITE / "data" / "snapshot.json", "w", encoding="utf-8") as f:
         json.dump(snap, f, ensure_ascii=False)
-    (SITE / "index.html").write_text(HTML, encoding="utf-8")
+    html = HTML.replace("__BUILD_TS__", snap["built_at"].replace(":", "").replace("-", "").replace(" ", ""))
+    (SITE / "index.html").write_text(html, encoding="utf-8")
     shutil.copy(ROOT / "static" / "vendor" / "chart.umd.min.js", SITE / "chart.umd.min.js")
     size = sum(f.stat().st_size for f in SITE.rglob("*") if f.is_file())
     print(f"[static] site/ 生成完成: snapshot {snap['built_at']}, quarter={snap['quarter']}, "

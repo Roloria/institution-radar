@@ -28,7 +28,7 @@ CANDIDATE_INSTITUTIONS = [
     ("BAUPOST GROUP", "1061768", "Baupost", "Seth Klarman"),
     ("PERSHING SQUARE", "1336528", "潘兴广场", "Bill Ackman"),
     ("SOROS FUND MANAGEMENT", "1029160", "索罗斯基金", "George Soros"),
-    ("APPALOOSA MANAGEMENT", "1006438", "Appaloosa", "David Tepper"),
+    ("APPALOOSA MANAGEMENT", "1656456", "Appaloosa", "David Tepper"),
     ("ELLIOTT INVESTMENT MANAGEMENT", "1791786", "埃利奥特", "Paul Singer"),
     ("COATUE MANAGEMENT", "1135730", "Coatue", "Philippe Laffont,重仓中概"),
     ("LONE PINE CAPITAL", "1061165", "孤松资本", "Stephen Mandel"),
@@ -59,9 +59,17 @@ def quarter_of_report_date(d: str) -> str:
     return f"{date.year}Q{(date.month - 1) // 3 + 1}"
 
 
-def normalize_values(rows, total):
-    """2023-01 之前 13F 的 value 单位是千美元，之后是美元。"""
-    if total and total < 5e9:
+def normalize_values(rows, quarter):
+    """单位归一：SEC 规则 2023-01-03 起 value 为美元、之前为千美元，但个别申报人
+    （如 Baupost）此后仍报千美元。用 value/shares 隐含股价中位数交叉验证：
+    正常股价不可能中位数 < $2，此时判为千美元 ×1000。"""
+    import statistics
+    prices = [r["value_usd"] / r["shares"] for r in rows if r.get("shares")]
+    if prices and statistics.median(prices) < 2:
+        for r in rows:
+            r["value_usd"] *= 1000.0
+        return
+    if quarter < "2023Q1":
         for r in rows:
             r["value_usd"] *= 1000.0
 
@@ -211,18 +219,17 @@ class Sec13FScraper:
                     and not it["name"].endswith(".xsd")]
             if not xmls:
                 continue
-            rows = None
+            # 13F-HR 可能把持仓分片在多个 XML（如挪威央行），全部解析合并
+            rows = []
             for xn in xmls:
                 try:
-                    rows = parse_infotable(get_with_retry(self.session, f"{base}/{xn}").content)
+                    rows.extend(parse_infotable(get_with_retry(self.session, f"{base}/{xn}").content))
                 except ET.ParseError:
-                    rows = None
-                if rows:
-                    break
+                    continue
             if not rows:
                 continue
             total = sum(x["value_usd"] for x in rows)
-            normalize_values(rows, total)
+            normalize_values(rows, quarter)
             total = sum(x["value_usd"] for x in rows)
             with get_db() as db:
                 cur = db.execute(
@@ -265,6 +272,12 @@ class Sec13FScraper:
                     prev = {r["cusip"] + "|" + r["put_call"]: r for r in db.execute(
                         "SELECT cusip,put_call,value_usd,shares FROM holdings WHERE inst_id=? AND quarter=?",
                         (iid, qs[1])).fetchall()}
+                # 上期有效性守卫：上期几乎无持仓(申报错位/解析失败)时环比不可信，
+                # 不生成误导性的全量"新增"（如挪威央行 Q1 仅 1 笔无效数据）
+                if len(qs) == 2 and len(prev) < 5:
+                    db.execute("DELETE FROM hchanges WHERE inst_id=? AND quarter=?", (iid, qs[0]))
+                    self.log(f"  {qs[0]}: 上期仅 {len(prev)} 笔，不可比，跳过环比")
+                    continue
             rows = [dict(r) for r in cur_rows]
             for r in rows:
                 key = r["cusip"] + "|" + r["put_call"]

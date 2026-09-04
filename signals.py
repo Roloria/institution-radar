@@ -69,9 +69,9 @@ def consensus_alerts():
     except Exception:  # noqa: BLE001
         return 0
     for g in items:
-        if not (g["buy"] >= 3 and g["net"] >= 2 and g["delta"] > 0):
+        if not (g["buy"] >= 5 and g["net"] >= 4 and g["delta"] > 0):
             continue
-        if g["value"] < 3e8:  # 至少有一家持仓 ≥ $3 亿，过滤噪音
+        if g["value"] < 1.5e9:  # 至少一家持仓 ≥ $15 亿，过滤小票噪音
             continue
         title = f"[共识] {g['buy']} 家机构净买入 {g['issuer']}"
         with get_db() as db:
