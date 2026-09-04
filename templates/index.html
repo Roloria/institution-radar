@@ -14,6 +14,7 @@
     <nav class="menu" id="menu">
       <a href="#/overview" class="active" data-page="overview"><span class="mi">🛰️</span>概览</a>
       <a href="#/global" data-page="global"><span class="mi">🌍</span>全球 13F 持仓</a>
+      <a href="#/signals" data-page="signals"><span class="mi">🎯</span>共识信号</a>
       <a href="#/domestic" data-page="domestic"><span class="mi">🇨🇳</span>国内机构动向</a>
       <a href="#/news" data-page="news"><span class="mi">📰</span>7×24 快讯</a>
       <a href="#/alerts" data-page="alerts"><span class="mi">🔔</span>告警中心<span class="badge" id="alert-badge" hidden>0</span></a>
@@ -80,6 +81,23 @@
             <div class="table-wrap" id="cur-table"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- 共识信号 -->
+    <section id="page-signals" class="page" hidden>
+      <div class="panel"><div class="panel-head"><h3>🎯 机构共识 <span class="sub" id="sig-quarter"></span><span class="sub">· 净买入机构数 ≥2 的标的（对标 Dataroma 活动流 / WhaleWisdom Double-down）</span></h3></div>
+        <div class="table-wrap" id="sig-buys"></div>
+      </div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>⚠️ 共识减持 / 清仓</h3></div><div class="table-wrap" id="sig-sells"></div></div>
+        <div class="panel"><div class="panel-head"><h3>🔍 个股透视 <span class="sub">· 查询某股票被哪些机构持有</span></h3></div>
+          <div class="toolbar"><input class="input" id="sig-stock-q" placeholder="输入代码/公司名，如 AAPL、ALPHABET、BABA"><button class="btn primary" id="sig-stock-btn">查询</button></div>
+          <div class="table-wrap" id="sig-stock"></div>
+        </div>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>📋 A 股今日关注 <span class="sub">· 13F 共识 × 北向/龙虎榜/连板 联动（quantskills 式行动清单）</span></h3></div>
+        <div class="grid-3" id="sig-domestic"></div>
       </div>
     </section>
 

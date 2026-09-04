@@ -57,6 +57,7 @@ function amtSpan(v) {
 const PAGES = {
   overview: { title: "概览", load: loadOverview },
   global: { title: "全球 13F 持仓", load: loadGlobal },
+  signals: { title: "共识信号", load: loadSignals },
   domestic: { title: "国内机构动向", load: loadDomestic },
   news: { title: "7×24 快讯", load: loadNewsPage },
   alerts: { title: "告警中心", load: loadAlertsPage },
@@ -254,6 +255,60 @@ function exportCsv(name, cols, rows) {
   a.download = name;
   a.click();
 }
+
+
+/* ---------- 共识信号 ---------- */
+function consensusTable(items, kind) {
+  if (!items.length) return `<div class="empty">本季度暂无${kind}共识</div>`;
+  return `<table><thead><tr><th>标的</th><th class="num">净机构</th><th class="num">新增</th><th class="num">增持</th><th class="num">减持</th><th class="num">清仓</th><th class="num">合计增减</th><th>机构明细</th></tr></thead><tbody>${
+    items.map((g) => `<tr>
+      <td><b>${esc(g.issuer)}</b>${g.tickers.length ? ` <span class="muted mono">${g.tickers.map(esc).join("/")}</span>` : ""}</td>
+      <td class="num"><b class="${g.net > 0 ? "pos" : g.net < 0 ? "neg" : ""}">${g.net > 0 ? "+" : ""}${g.net}</b></td>
+      <td class="num pos">${g.new || ""}</td>
+      <td class="num pos">${g.buy - g.new || ""}</td>
+      <td class="num neg">${g.sell - g.exit || ""}</td>
+      <td class="num neg">${g.exit || ""}</td>
+      <td class="num">${amtSpan(g.delta)}</td>
+      <td style="max-width:420px;white-space:normal">${g.insts.slice(0, 8).map((x) => `<span class="tag ${x.change_type === "新增" || x.change_type === "增持" ? "g" : x.change_type === "清仓" || x.change_type === "减持" ? "r" : "n"}" title="${x.change_type} ${fmtUsd(x.value)}">${esc(x.name)}${x.pct != null ? " " + (x.pct > 0 ? "+" : "") + x.pct.toFixed(0) + "%" : ""}</span>`).join("")}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+async function loadSignals() {
+  const d = await api("/api/consensus");
+  $("#sig-quarter").textContent = d.quarter + ` · 全部 ${d.n_all} 只标的出现机构调仓`;
+  $("#sig-buys").innerHTML = consensusTable(d.buys, "买入");
+  $("#sig-sells").innerHTML = consensusTable(d.sells, "卖出");
+  renderStockView();
+
+  // A 股今日关注：北向近5日 + 龙虎榜净买Top + 连板天梯
+  const [hkt, bb, zt] = await Promise.all([api("/api/hkt?days=10"), api("/api/billboard"), api("/api/ztpool")]);
+  const byDate = {};
+  hkt.forEach((r) => { if (r.mutual_type.startsWith("北向")) byDate[r.trade_date] = (byDate[r.trade_date] || 0) + (r.net_amt || 0) / 1e8; });
+  const days = Object.keys(byDate).sort().slice(-5);
+  const north = days.map((d2) => `<div class="srow"><span>${d2.slice(5)}</span><span class="${byDate[d2] >= 0 ? "pos" : "neg"}" style="margin-left:auto">${byDate[d2] >= 0 ? "+" : ""}${byDate[d2].toFixed(1)} 亿</span></div>`).join("") || '<div class="empty">无数据</div>';
+  const bbTop = bb.rows.slice(0, 8).map((r) => `<div class="srow"><span><b>${esc(r.name)}</b> <span class="muted mono">${esc(r.code)}</span></span><span class="${(r.net_amt || 0) >= 0 ? "pos" : "neg"}" style="margin-left:auto">${r.net_amt != null ? (r.net_amt > 0 ? "+" : "") + (r.net_amt / 1e4).toFixed(0) + " 万" : "-"}</span></div>`).join("") || '<div class="empty">无数据</div>';
+  const ztTop = zt.rows.slice(0, 8).map((r) => `<div class="srow"><span><b>${esc(r.name)}</b> <span class="muted mono">${esc(r.code)}</span></span><span class="lbc" style="margin-left:auto;color:var(--red)">${r.lbc > 1 ? r.lbc + " 连板" : "首板"}</span></div>`).join("") || '<div class="empty">无数据</div>';
+  $("#sig-domestic").innerHTML = `
+    <div><div class="hint" style="margin-bottom:8px">🌊 北向资金近 5 日净买</div>${north}</div>
+    <div><div class="hint" style="margin-bottom:8px">🐉 龙虎榜净买 Top8（${esc(bb.date)}）</div>${bbTop}</div>
+    <div><div class="hint" style="margin-bottom:8px">🔥 连板天梯（${esc(zt.date)}）</div>${ztTop}</div>`;
+}
+async function renderStockView() {
+  const q = $("#sig-stock-q").value.trim();
+  if (!q) { $("#sig-stock").innerHTML = '<div class="empty">输入美股代码或公司名查看机构持仓（如 AAPL / ALPHABET / NVDA / BABA）</div>'; return; }
+  const d = await api(`/api/stock?q=${encodeURIComponent(q)}`);
+  const total = d.rows.reduce((s2, r) => s2 + r.curr_value, 0);
+  $("#sig-stock").innerHTML = d.rows.length ? `
+    <div class="hint" style="margin-bottom:8px">${esc(d.rows[0].issuer)} ${d.rows[0].ticker ? "(" + esc(d.rows[0].ticker) + ")" : ""} · ${d.rows.length} 家机构持有 · 合计 ${fmtUsd(total)}（${esc(d.quarter)}）</div>
+    <table><thead><tr><th>机构</th><th>变动</th><th class="num">幅度</th><th class="num">市值</th><th class="num">增减</th><th class="num">股数</th></tr></thead><tbody>${
+    d.rows.map((r) => `<tr>
+      <td>${esc(r.name_cn || r.inst_name)}</td><td>${changeTag(r.change_type)}</td>
+      <td class="num">${pctSpan(r.pct)}</td><td class="num">${fmtUsd(r.curr_value)}</td>
+      <td class="num">${amtSpan(r.delta_value)}</td><td class="num muted">${r.shares_curr ? fmtNum(r.shares_curr, 0) : "-"}</td>
+    </tr>`).join("")}</tbody></table>`
+    : `<div class="empty">没有机构持有「${esc(q)}」（或数据未覆盖）</div>`;
+}
+$("#sig-stock-btn").addEventListener("click", renderStockView);
+$("#sig-stock-q").addEventListener("keydown", (e) => { if (e.key === "Enter") renderStockView(); });
 
 /* ---------- 国内 ---------- */
 const D = { tab: "billboard", hktChart: null, watchCode: null, holderType: "" };

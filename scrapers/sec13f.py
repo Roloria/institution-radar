@@ -46,7 +46,7 @@ CUSIP_TICKER = {
     "09062X108": "BABA", "20030N101": "PDD", "G7090K109": "BIDU", "09972D103": "NTES",
     "62914V105": "NIO", "03076C106": "BILI", "00727P102": "TCOM", "031162100": "ASML",
     "02209S108": "AUDC", "45767V100": "INTC", "032097108": "ABNB", "88579Y101": "UBER",
-    "458140100": "NFLX", "68389X105": "ORCL", "02005N100": "ALLY", "031100100": "AXP",
+    "458140100": "INTC", "64110L106": "NFLX", "68389X105": "ORCL", "02005N100": "ALLY", "031100100": "AXP",
     "949746101": "WFC", "060505104": "BAC", "172967424": "C", "459200101": "IBM",
     "25746U109": "DAL", "293792107": "EA", "34959E109": "FTNT", "501044103": "GM",
     "68468J108": "PAYC", "742718109": "KR", "98956V105": "ZM", "98620K101": "ZNGA",
@@ -64,6 +64,36 @@ def normalize_values(rows, total):
     if total and total < 5e9:
         for r in rows:
             r["value_usd"] *= 1000.0
+
+
+def _ticker_lookup():
+    """合并内置映射与 scripts/update_tickers.py 生成的名称映射。"""
+    import re
+    from pathlib import Path
+    name_map = {}
+    f = Path(__file__).resolve().parent.parent / "data" / "sec_name_ticker.json"
+    if f.exists():
+        try:
+            name_map = json.loads(f.read_text())
+        except Exception:  # noqa: BLE001
+            name_map = {}
+
+    def norm(s):
+        s = re.sub(r"[^A-Z0-9 ]", " ", (s or "").upper())
+        s = re.sub(r"\b(INC|CORP|CORPORATION|LTD|LIMITED|LLC|LP|CO|COMPANY|PLC|SA|AG|NV|TR|TRUST|THE|CLASS|A|B|C|COM|NEW)\b", " ", s)
+        return re.sub(r"\s+", "", s)
+
+    return lambda cusip, issuer: CUSIP_TICKER.get(cusip) or name_map.get(norm(issuer), "")
+
+
+TICKER_OF = None  # 惰性初始化
+
+
+def ticker_for(cusip, issuer):
+    global TICKER_OF
+    if TICKER_OF is None:
+        TICKER_OF = _ticker_lookup()
+    return TICKER_OF(cusip, issuer)
 
 
 def parse_infotable(xml_bytes: bytes):
@@ -202,7 +232,7 @@ class Sec13FScraper:
                 if cur.rowcount == 0:
                     continue  # 已入库过
                 for x in rows:
-                    x["ticker"] = CUSIP_TICKER.get(x["cusip"], "")
+                    x["ticker"] = ticker_for(x["cusip"], x["issuer"])
                     db.execute(
                         "INSERT OR IGNORE INTO holdings(inst_id,quarter,cusip,issuer,ticker,class,put_call,value_usd,shares) "
                         "VALUES(?,?,?,?,?,?,?,?,?)",

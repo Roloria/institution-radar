@@ -1,13 +1,29 @@
 """HTTP 会话工具：UA、代理、重试。"""
 import os
 import time
+from pathlib import Path
 
 import requests
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/125.0 Safari/537.36")
-# SEC 要求 UA 携带真实联系方式；请设置环境变量 SEC_UA，如 "YourName your@email.com"
-SEC_UA = os.environ.get("SEC_UA", "InstitutionRadar/1.0 (set-your-contact via SEC_UA env)")
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def load_sec_ua() -> str:
+    """SEC 要求 UA 携带真实联系方式：优先环境变量 SEC_UA，其次本地 data/sec_ua.txt（不入库）。"""
+    v = os.environ.get("SEC_UA", "").strip()
+    if v:
+        return v
+    f = ROOT / "data" / "sec_ua.txt"
+    if f.exists():
+        v = f.read_text().strip()
+        if v:
+            return v
+    return "InstitutionRadar/1.0 (set SEC_UA env or data/sec_ua.txt with a real contact)"
+
+
+SEC_UA = load_sec_ua()
 
 
 def make_session(use_proxy=False, proxy_url="", retries=2, sec_style=False):

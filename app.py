@@ -287,6 +287,38 @@ def news_list():
     return jsonify(rows)
 
 
+# ---------------- 共识信号与个股透视 ----------------
+@app.route("/api/consensus")
+def consensus():
+    import signals as sig
+    quarter, items = sig.compute_consensus(request.args.get("quarter") or None)
+    buys = [x for x in items if x["net"] >= 2 or x["new"] >= 2][:60]
+    # 共识卖出：卖方机构数 > 买方，或明确清仓退出
+    sells = [x for x in items if (x["net"] <= -2 or (x["exit"] >= 2 and x["net"] <= 0))][:60]
+    sells.sort(key=lambda x: (x["net"], -abs(x["delta"])))
+    return jsonify(quarter=quarter, n_all=len(items), buys=buys, sells=sells)
+
+
+@app.route("/api/stock")
+def stock_view():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify(rows=[], quarter="")
+    ql = q.upper()
+    import signals as sig
+    with store.get_db() as db:
+        quarter = db.execute("SELECT MAX(quarter) m FROM hchanges").fetchone()["m"]
+        rows = store.rows_to_dicts(db.execute(
+            "SELECT h.inst_id, h.quarter, h.cusip, h.issuer, h.ticker, h.change_type, h.pct, "
+            "h.prev_value, h.curr_value, h.delta_value, h.shares_prev, h.shares_curr, "
+            "i.name_cn, i.name AS inst_name "
+            "FROM hchanges h JOIN institutions i ON i.id=h.inst_id "
+            "WHERE h.quarter=? AND (UPPER(h.issuer) LIKE ? OR UPPER(h.ticker) LIKE ? OR h.cusip LIKE ?) "
+            "ORDER BY h.curr_value DESC",
+            (quarter, f"%{ql}%", f"%{ql}%", f"%{ql}%")))
+    return jsonify(quarter=quarter, rows=rows)
+
+
 @app.route("/api/alerts")
 def alerts_list():
     limit = min(request.args.get("limit", 100, type=int), 500)

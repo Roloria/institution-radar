@@ -70,6 +70,11 @@ def run_source(key):
                                            logger=lambda m: print(f"[13F] {m}"))
             ok_n, nq, changes = scraper.run()
             holding_alerts()
+            try:
+                import signals
+                signals.consensus_alerts()
+            except Exception as _e:  # noqa: BLE001
+                print(f"[signals] 共识告警失败: {_e}")
             msg, count, ok = f"{ok_n} 家机构, 新增期数 {nq}, 变动 {changes} 条", changes, True
 
         else:
