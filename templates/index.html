@@ -27,11 +27,12 @@
   </aside>
 
   <main class="main">
+    <div class="snapshot-banner static-only">📡 公开数据快照（只读镜像）· 数据截至 <b id="snap-built">…</b> · 浏览/筛选/图表/导出与本地一致；关注机构、自选股、实时告警推送请运行本地实例 · <a href="https://github.com/Roloria/institution-radar" target="_blank" rel="noopener">GitHub</a></div>
     <header class="topbar">
       <h1 id="page-title">概览</h1>
       <div class="topbar-actions">
-        <label class="switch" title="新告警桌面通知"><input type="checkbox" id="desktop-notify"><span>桌面通知</span></label>
-        <button class="btn ghost" id="btn-refresh-all" title="触发一轮全量更新">⟳ 全量更新</button>
+        <label class="switch static-hide" title="新告警桌面通知"><input type="checkbox" id="desktop-notify"><span>桌面通知</span></label>
+        <button class="btn ghost static-hide" id="btn-refresh-all" title="触发一轮全量更新">⟳ 全量更新</button>
       </div>
     </header>
 
@@ -42,7 +43,7 @@
         <div class="panel"><div class="panel-head"><h3>🔔 最新告警</h3><a class="more" href="#/alerts">查看全部</a></div><div class="alert-list" id="ov-alerts"></div></div>
         <div class="panel"><div class="panel-head"><h3>🌐 13F 焦点变动 <span class="sub" id="ov-quarter"></span></h3><a class="more" href="#/global">查看全部</a></div><div class="table-wrap" id="ov-changes"></div></div>
         <div class="panel"><div class="panel-head"><h3>⚡ 机构关键词快讯</h3><a class="more" href="#/news">查看全部</a></div><div class="news-list" id="ov-news"></div></div>
-        <div class="panel"><div class="panel-head"><h3>🛰️ 数据源状态</h3><a class="more" href="#/settings">管理</a></div><div class="src-mini" id="ov-sources"></div></div>
+        <div class="panel"><div class="panel-head"><h3>🛰️ 数据源状态</h3><a class="more static-hide" href="#/settings">管理</a></div><div class="src-mini" id="ov-sources"></div></div>
       </div>
     </section>
 
@@ -126,7 +127,7 @@
         <div class="toolbar">
           <input class="input" id="wl-code" placeholder="6位代码" style="width:110px">
           <input class="input" id="wl-name" placeholder="名称" style="width:120px">
-          <button class="btn primary" id="wl-add">+ 自选股</button>
+          <button class="btn primary static-hide" id="wl-add">+ 自选股</button>
           <div class="seg" id="holder-type-seg"><button class="seg-btn active" data-t="">全部类型</button></div>
           <input class="input" id="holder-search" placeholder="搜索股东…">
         </div>
@@ -165,7 +166,7 @@
             <button class="seg-btn" data-t="holder">股东异动</button>
             <button class="seg-btn" data-t="news_kw">关键词</button>
           </div>
-          <button class="btn ghost" id="alert-clear">清空记录</button>
+          <button class="btn ghost static-hide" id="alert-clear">清空记录</button>
         </div>
         <div class="alert-list big" id="alert-list"></div>
       </div>
@@ -173,6 +174,16 @@
 
     <!-- 设置 -->
     <section id="page-settings" class="page" hidden>
+      <div class="panel static-only">
+        <div class="panel-head"><h3>📡 关于本站</h3></div>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.9">
+          这是 <b>机构雷达</b> 的公开数据快照站（只读镜像），样式与功能对齐本地实例：全球 13F 持仓与变动、机构共识信号、个股透视、龙虎榜 / 沪深港通 / 十大流通股东 / 涨停池、7×24 快讯与告警记录均可浏览、筛选与导出 CSV。<br>
+          <b style="color:var(--text)">本地实例</b>额外支持：APScheduler 定时自动爬取更新、实时告警推送（Bark / Server酱 / 飞书 / 钉钉 / Webhook）、桌面通知、机构关注与自选股管理、数据源启停与间隔配置。<br>
+          快照生成时间：<b id="about-built" style="color:var(--text)">…</b> · 部署脚本 <span class="mono">scripts/deploy_pages.sh</span> · 开源地址 <a href="https://github.com/Roloria/institution-radar" target="_blank" rel="noopener">GitHub</a><br>
+          数据来源：SEC EDGAR 13F · 东方财富 · 新浪财经。存在披露时滞，仅供研究学习，不构成投资建议。
+        </p>
+      </div>
+      <div class="static-hide">
       <div class="grid-2">
         <div class="panel"><div class="panel-head"><h3>🛰️ 数据源 · 自动更新</h3></div>
           <div class="src-list" id="src-list"></div>
@@ -197,6 +208,7 @@
             <button class="btn primary" id="proxy-save">保存</button>
           </div>
         </div>
+      </div>
       </div>
     </section>
   </main>

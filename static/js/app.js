@@ -2,12 +2,104 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 
+const STATIC_MODE = document.body.dataset.static === "1";
+const SD = {};            // 静态快照数据缓存
+const _sdPending = {};
+async function sdFetch(name) {
+  if (!SD[name]) SD[name] = _sdPending[name] ||= fetch(`./data/${name}.json`).then((r) => { if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`); return r.json(); });
+  return SD[name];
+}
+async function staticApi(path) {
+  const [p, qs] = path.split("?");
+  const q = new URLSearchParams(qs || "");
+  if (p === "/api/summary") return sdFetch("summary");
+  if (p === "/api/institutions") return sdFetch("institutions");
+  if (p === "/api/quarters") {
+    const all = await sdFetch("quarters");
+    return all.byInst[q.get("inst_id")] || all.all || [];
+  }
+  if (p === "/api/holdings/changes") {
+    let rows = await sdFetch("changes");
+    const inst = q.get("inst_id"), ctype = q.get("type"), kw = (q.get("q") || "").trim().toLowerCase(), quarter = q.get("quarter");
+    if (inst) rows = rows.filter((r) => r.inst_id === +inst);
+    if (quarter) rows = rows.filter((r) => r.quarter === quarter);
+    if (ctype) rows = rows.filter((r) => r.change_type === ctype);
+    if (kw) rows = rows.filter((r) => `${r.issuer}${r.ticker}${r.name_cn || ""}`.toLowerCase().includes(kw));
+    return rows.slice(0, Math.min(+(q.get("limit") || 2000), 100000));
+  }
+  if (p === "/api/holdings/current") {
+    const hc = await sdFetch("holdings_current");
+    const o = (hc.byInst || {})[q.get("inst_id")] || { quarter: "", rows: [] };
+    const kw = (q.get("q") || "").trim().toLowerCase();
+    const rows = kw ? o.rows.filter((r) => `${r.issuer}${r.ticker}`.toLowerCase().includes(kw)) : o.rows;
+    return { quarter: o.quarter, rows };
+  }
+  if (p === "/api/stock") {
+    const rows = await sdFetch("changes");
+    const ql = (q.get("q") || "").trim().toUpperCase();
+    const quarter = rows.length ? rows[0].quarter : "";
+    const hit = rows.filter((r) => r.quarter === quarter && (`${r.issuer}`.toUpperCase().includes(ql) || (r.ticker || "").toUpperCase().includes(ql) || (r.cusip || "").toUpperCase().includes(ql)));
+    hit.sort((a, b) => (b.curr_value || 0) - (a.curr_value || 0));
+    return { quarter, rows: hit };
+  }
+  if (p === "/api/consensus") return sdFetch("consensus");
+  if (p === "/api/billboard") {
+    const bb = await sdFetch("billboard");
+    const date = q.get("date") || bb.dates[0];
+    const kw = (q.get("q") || "").trim();
+    let rows = [...(bb.byDate[date] || [])];
+    if (kw) rows = rows.filter((r) => `${r.name}${r.code}`.includes(kw));
+    rows.sort((a, b) => Math.abs(b.net_amt || 0) - Math.abs(a.net_amt || 0));
+    return { date, dates: bb.dates, rows };
+  }
+  if (p === "/api/hkt") return sdFetch("hkt");
+  if (p === "/api/holders") {
+    const h = await sdFetch("holders");
+    const kw = (q.get("q") || "").trim(), code = q.get("code"), htype = q.get("type");
+    let rows = h.rows;
+    if (code) rows = rows.filter((r) => r.code === code);
+    if (htype) rows = rows.filter((r) => r.holder_type === htype);
+    if (kw) rows = rows.filter((r) => `${r.holder_name}${r.sec_name}`.includes(kw));
+    return { rows, watchlist: h.watchlist };
+  }
+  if (p === "/api/ztpool") {
+    const z = await sdFetch("ztpool");
+    const date = q.get("date") || z.dates[0];
+    return { date, dates: z.dates, rows: z.byDate[date] || [] };
+  }
+  if (p === "/api/news") {
+    let rows = await sdFetch("news");
+    const source = q.get("source"), kw = (q.get("q") || "").trim(), matched = q.get("matched") === "1";
+    if (source) rows = rows.filter((r) => r.source === source);
+    if (kw) rows = rows.filter((r) => `${r.title}${r.content}`.includes(kw));
+    if (matched) rows = rows.filter((r) => (r.matched || []).length);
+    return rows.slice(0, +(q.get("limit") || 300));
+  }
+  if (p === "/api/alerts") {
+    let rows = await sdFetch("alerts");
+    const kind = q.get("kind");
+    if (kind) rows = rows.filter((r) => r.kind === kind);
+    return { rows, unread: 0 };
+  }
+  return null;
+}
 async function api(path, opts = {}) {
+  if (STATIC_MODE) {
+    const d = await staticApi(path);
+    if (d === null) throw new Error(`公开快照未包含 ${path.split("?")[0]}`);
+    return d;
+  }
   const r = await fetch(path, opts);
   if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
   return r.json();
 }
-const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+function post(path, body) {
+  if (STATIC_MODE) {
+    alert("公开快照站为只读镜像；关注机构、自选股、数据源启停、推送配置请在本地实例操作。");
+    return Promise.resolve({ ok: false });
+  }
+  return api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+}
 
 /* ---------- 格式化 ---------- */
 function fmtUsd(v) { // v 美元
@@ -42,6 +134,10 @@ function changeTag(t) {
   const [c, i] = map[t] || ["n", ""];
   return `<span class="tag ${c}">${i} ${esc(t)}</span>`;
 }
+function amtUsdSpan(v) {
+  if (!v) return '<span class="muted">-</span>';
+  return `<span class="${v > 0 ? "pos" : "neg"}">${v > 0 ? "+" : "-"}${fmtUsd(Math.abs(v))}</span>`;
+}
 function pctSpan(p) {
   if (p == null) return '<span class="muted">-</span>';
   const cls = p > 0 ? "pos" : p < 0 ? "neg" : "muted";
@@ -61,7 +157,7 @@ const PAGES = {
   domestic: { title: "国内机构动向", load: loadDomestic },
   news: { title: "7×24 快讯", load: loadNewsPage },
   alerts: { title: "告警中心", load: loadAlertsPage },
-  settings: { title: "数据源与设置", load: loadSettings },
+  settings: { title: STATIC_MODE ? "关于本站" : "数据源与设置", load: () => (STATIC_MODE ? Promise.resolve() : loadSettings()) },
 };
 function route() {
   const name = (location.hash.replace("#/", "") || "overview").split("?")[0];
@@ -90,7 +186,7 @@ async function loadOverview() {
     ? d.alerts.map(alertItem).join("")
     : `<div class="empty">暂无告警 — 数据抓取完成后这里会出现机构异动提醒</div>`;
   $("#ov-changes").innerHTML = d.top_changes.length ? `<table><thead><tr><th>机构</th><th>标的</th><th>变动</th><th class="num">市值</th><th class="num">增减</th></tr></thead><tbody>${
-    d.top_changes.map((c) => `<tr><td>${esc(c.name_cn || c.inst_name)}</td><td class="mono">${esc(c.issuer || c.ticker)}${c.ticker ? ` <span class="muted">${esc(c.ticker)}</span>` : ""}</td><td>${changeTag(c.change_type)}</td><td class="num">${fmtUsd(Math.max(c.curr_value, c.prev_value))}</td><td class="num">${amtSpan(c.delta_value ? (c.delta_value > 0 ? 1 : -1) * Math.abs(c.delta_value) : 0)}</td></tr>`).join("")
+    d.top_changes.map((c) => `<tr><td>${esc(c.name_cn || c.inst_name)}</td><td class="mono">${esc(c.issuer || c.ticker)}${c.ticker ? ` <span class="muted">${esc(c.ticker)}</span>` : ""}</td><td>${changeTag(c.change_type)}</td><td class="num">${fmtUsd(Math.max(c.curr_value, c.prev_value))}</td><td class="num">${amtUsdSpan(c.delta_value)}</td></tr>`).join("")
     }</tbody></table>` : `<div class="empty">13F 数据抓取中，请稍候…</div>`;
   $("#ov-news").innerHTML = d.news_matched.length
     ? d.news_matched.map(newsItem).join("")
@@ -120,7 +216,7 @@ function renderInstList() {
   $("#inst-list").innerHTML = list.map((i) => `
     <div class="inst-item ${i.id === G.instId ? "active" : ""}" data-id="${i.id}">
       <div class="nm" onclick="selectInst(${i.id})"><b>${esc(i.name_cn || i.name)}</b><span>${esc(i.name)} · ${esc(i.note || "")}</span></div>
-      <span class="follow ${i.followed ? "on" : ""}" onclick="toggleFollow(${i.id})" title="关注后才会推送提醒">${i.followed ? "★" : "☆"}</span>
+      ${STATIC_MODE ? "" : `<span class="follow ${i.followed ? "on" : ""}" onclick="toggleFollow(${i.id})" title="关注后才会推送提醒">${i.followed ? "★" : "☆"}</span>`}
     </div>`).join("") || `<div class="empty">无匹配</div>`;
 }
 window.selectInst = (id) => { G.instId = id; renderInstList(); loadInstData(); };
@@ -268,8 +364,8 @@ function consensusTable(items, kind) {
       <td class="num pos">${g.buy - g.new || ""}</td>
       <td class="num neg">${g.sell - g.exit || ""}</td>
       <td class="num neg">${g.exit || ""}</td>
-      <td class="num">${amtSpan(g.delta)}</td>
-      <td style="max-width:420px;white-space:normal">${g.insts.slice(0, 8).map((x) => `<span class="tag ${x.change_type === "新增" || x.change_type === "增持" ? "g" : x.change_type === "清仓" || x.change_type === "减持" ? "r" : "n"}" title="${x.change_type} ${fmtUsd(x.value)}">${esc(x.name)}${x.pct != null ? " " + (x.pct > 0 ? "+" : "") + x.pct.toFixed(0) + "%" : ""}</span>`).join("")}</td>
+      <td class="num">${amtUsdSpan(g.delta)}</td>
+      <td style="min-width:300px;max-width:420px;white-space:normal">${g.insts.slice(0, 8).map((x) => `<span class="tag ${x.change_type === "新增" || x.change_type === "增持" ? "g" : x.change_type === "清仓" || x.change_type === "减持" ? "r" : "n"}" title="${x.change_type} ${fmtUsd(x.value)}">${esc(x.name)}${x.pct != null ? " " + (x.pct > 0 ? "+" : "") + x.pct.toFixed(0) + "%" : ""}</span>`).join("")}</td>
     </tr>`).join("")}</tbody></table>`;
 }
 async function loadSignals() {
@@ -378,7 +474,7 @@ async function loadHolders() {
   $("#holder-type-seg").innerHTML = types.map((t) => `<button class="seg-btn ${t === D.holderType ? "active" : ""}" data-t="${t}">${t || "全部类型"}</button>`).join("");
   // 自选 chips
   $("#watch-chips").innerHTML = d.watchlist.map((w) =>
-    `<span class="chip ${w.code === D.watchCode ? "active" : ""}" onclick="pickWatch('${w.code}')">${esc(w.code)} ${esc(w.name)}<span class="x" onclick="delWatch('${w.code}', event)">✕</span></span>`).join("");
+    `<span class="chip ${w.code === D.watchCode ? "active" : ""}" onclick="pickWatch('${w.code}')">${esc(w.code)} ${esc(w.name)}${STATIC_MODE ? "" : `<span class="x" onclick="delWatch('${w.code}', event)">✕</span>`}</span>`).join("");
   $("#holder-table").innerHTML = `<table><thead><tr><th>报告期</th><th>股票</th><th>排名</th><th>股东名称</th><th>类型</th><th class="num">持股(万股)</th><th class="num">占流通</th><th>变动</th><th class="num">变动幅度</th></tr></thead><tbody>${
     d.rows.map((r) => `<tr>
       <td class="muted">${esc(r.end_date)}</td>
@@ -492,6 +588,7 @@ $("#alert-clear").addEventListener("click", async () => {
 
 /* 告警轮询 + 桌面通知 */
 async function pollAlerts() {
+  if (STATIC_MODE) return;
   try {
     const d = await api(`/api/alerts?limit=20&since_id=${alertSince}`);
     if (alertSince === 0 && d.rows.length) { alertSince = d.rows[0].id; return; }
@@ -590,6 +687,15 @@ $("#proxy-save").addEventListener("click", async () => {
 });
 
 /* ---------- 启动 ---------- */
+if (STATIC_MODE) {
+  const ma = $('#menu a[data-page="settings"]');
+  if (ma) ma.innerHTML = '<span class="mi">📡</span>关于本站';
+  fetch("./data/built.json").then((r) => r.json()).then((b) => {
+    $("#snap-built").textContent = b.built_at;
+    const ab = $("#about-built");
+    if (ab) ab.textContent = b.built_at;
+  }).catch(() => {});
+}
 setInterval(() => ($("#foot-clock").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false })), 1000);
 setInterval(pollAlerts, 30000);
 route();

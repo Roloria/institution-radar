@@ -2,7 +2,7 @@
 
 📡 全球 + 国内主流投资机构的 **持仓变动 + 异动新闻** 监控工具网站。爬虫抓取真实公开数据源，定时自动更新，站内告警 + 桌面通知 + 手机推送。
 
-> 🌐 **在线公开快照站点**：[https://roloria.github.io/institution-radar/](https://roloria.github.io/institution-radar/)（共识信号 / 最新告警 / 北向资金的静态数据快照；本地实例才是实时版）
+> 🌐 **在线公开站点**：[https://roloria.github.io/institution-radar/](https://roloria.github.io/institution-radar/) —— 与本地实例**同构的只读镜像**（同一套 SPA：13F 持仓/共识信号/个股透视/国内动向/快讯/告警，支持筛选、搜索、图表与 CSV 导出），数据为定期发布的静态快照；实时爬取、告警推送与配置管理请运行本地实例。
 
 | 概览 | 全球 13F | 国内动向 |
 |:---:|:---:|:---:|
@@ -45,7 +45,7 @@ APScheduler 按数据源配置的间隔定时抓取（快讯 5 分钟、涨停 1
 scripts/deploy_pages.sh   # 生成 site/ 快照并强推 gh-pages 分支
 ```
 
-`scripts/build_static.py` 从本地数据库导出共识信号/告警/北向/龙虎榜等核心数据的静态快照，推送到 gh-pages 分支后由 GitHub Pages 发布。适合分享与移动端随时查看；实时告警与全量明细仍在本地实例。
+`scripts/build_static.py` 复用本地同一套 SPA 生成只读镜像（`site/`）：数据导出为 API 同形的静态 JSON（summary/institutions/quarters/changes/holdings/consensus/stock/billboard/hkt/holders/ztpool/news/alerts），前端 `STATIC_MODE` 分支改读静态数据，浏览、筛选、搜索、图表与 CSV 导出与本地完全一致；写操作（关注/自选/数据源/推送）在公开站自动隐藏。
 
 ## 配置说明
 
