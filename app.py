@@ -1,4 +1,4 @@
-"""机构雷达 · 全球+国内投资机构持仓与异动监控网站。
+"""全球投资机构雷达 · 全球+国内投资机构持仓与异动监控网站。
 
 启动: .venv/bin/python app.py   -> http://127.0.0.1:8900
 功能: 13F 持仓变动 · 龙虎榜 · 沪深港通 · 十大流通股东 · 涨停池 · 7x24 快讯 · 告警推送
@@ -411,5 +411,5 @@ if __name__ == "__main__":
     seed_base()
     threading.Thread(target=initial_scrape, daemon=True).start() if _never_ran() else None
     sch.start()
-    print("机构雷达 -> http://127.0.0.1:8900")
+    print("全球投资机构雷达 -> http://127.0.0.1:8900")
     app.run(host="127.0.0.1", port=8900, debug=False, use_reloader=False)
