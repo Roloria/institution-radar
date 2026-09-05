@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全球投资机构雷达 · 机构持仓与异动监控</title>
+<link rel="stylesheet" href="./app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+</head>
+<body class="static" data-static="1">
+<div class="layout">
+  <aside class="sidebar">
+    <div class="logo"><span class="logo-icon">📡</span><div><div class="logo-name">全球投资机构雷达</div><div class="logo-sub">GLOBAL INSTITUTION RADAR</div></div></div>
+    <nav class="menu" id="menu">
+      <a href="#/overview" class="active" data-page="overview"><span class="mi">🛰️</span>概览</a>
+      <a href="#/global" data-page="global"><span class="mi">🌍</span>全球 13F 持仓</a>
+      <a href="#/signals" data-page="signals"><span class="mi">🎯</span>共识信号</a>
+      <a href="#/domestic" data-page="domestic"><span class="mi">🇨🇳</span>国内机构动向</a>
+      <a href="#/news" data-page="news"><span class="mi">📰</span>7×24 快讯</a>
+      <a href="#/alerts" data-page="alerts"><span class="mi">🔔</span>告警中心<span class="badge" id="alert-badge" hidden>0</span></a>
+      <a href="#/settings" data-page="settings"><span class="mi">⚙️</span>数据源与设置</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="foot-row">数据自动更新中</div>
+      <div class="foot-row" id="foot-clock">--:--:--</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="snapshot-banner static-only">📡 公开数据快照（只读镜像）· 数据截至 <b id="snap-built">…</b> · 浏览/筛选/图表/导出与本地一致；关注机构、自选股、实时告警推送请运行本地实例 · <a href="https://github.com/Roloria/institution-radar" target="_blank" rel="noopener">GitHub</a></div>
+    <header class="topbar">
+      <h1 id="page-title">概览</h1>
+      <div class="topbar-actions">
+        <label class="switch static-hide" title="新告警桌面通知"><input type="checkbox" id="desktop-notify"><span>桌面通知</span></label>
+        <button class="btn ghost static-hide" id="btn-refresh-all" title="触发一轮全量更新">⟳ 全量更新</button>
+      </div>
+    </header>
+
+    <!-- 概览 -->
+    <section id="page-overview" class="page">
+      <div class="stat-grid" id="stat-grid"></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>🔔 最新告警</h3><a class="more" href="#/alerts">查看全部</a></div><div class="alert-list" id="ov-alerts"></div></div>
+        <div class="panel"><div class="panel-head"><h3>🌐 13F 焦点变动 <span class="sub" id="ov-quarter"></span></h3><a class="more" href="#/global">查看全部</a></div><div class="table-wrap" id="ov-changes"></div></div>
+        <div class="panel"><div class="panel-head"><h3>⚡ 机构关键词快讯</h3><a class="more" href="#/news">查看全部</a></div><div class="news-list" id="ov-news"></div></div>
+        <div class="panel"><div class="panel-head"><h3>🛰️ 数据源状态</h3><a class="more static-hide" href="#/settings">管理</a></div><div class="src-mini" id="ov-sources"></div></div>
+      </div>
+    </section>
+
+    <!-- 全球13F -->
+    <section id="page-global" class="page" hidden>
+      <div class="global-layout">
+        <div class="panel inst-panel">
+          <div class="panel-head"><h3>机构</h3></div>
+          <input class="input" id="inst-search" placeholder="搜索机构…">
+          <div class="inst-list" id="inst-list"></div>
+        </div>
+        <div class="global-main">
+          <div class="panel" id="inst-head"></div>
+          <div class="tabs" id="hold-tabs">
+            <button class="tab active" data-tab="changes">持仓变动</button>
+            <button class="tab" data-tab="current">当前持仓</button>
+          </div>
+          <div class="panel" id="tab-changes">
+            <div class="toolbar">
+              <div class="seg" id="change-seg">
+                <button class="seg-btn active" data-t="">全部</button>
+                <button class="seg-btn" data-t="新增">新增</button>
+                <button class="seg-btn" data-t="清仓">清仓</button>
+                <button class="seg-btn" data-t="增持">增持</button>
+                <button class="seg-btn" data-t="减持">减持</button>
+              </div>
+              <select class="input sel" id="quarter-sel"></select>
+              <input class="input" id="chg-search" placeholder="搜索股票/机构…">
+              <button class="btn ghost" id="chg-export">导出CSV</button>
+            </div>
+            <div class="chart-box"><canvas id="chg-chart"></canvas></div>
+            <div class="table-wrap" id="chg-table"></div>
+          </div>
+          <div class="panel" id="tab-current" hidden>
+            <div class="toolbar"><input class="input" id="cur-search" placeholder="搜索持仓…"><span class="hint" id="cur-meta"></span></div>
+            <div class="table-wrap" id="cur-table"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 共识信号 -->
+    <section id="page-signals" class="page" hidden>
+      <div class="panel"><div class="panel-head"><h3>🎯 机构共识 <span class="sub" id="sig-quarter"></span><span class="sub">· 净买入机构数 ≥2 的标的（对标 Dataroma 活动流 / WhaleWisdom Double-down）</span></h3></div>
+        <div class="table-wrap" id="sig-buys"></div>
+      </div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>⚠️ 共识减持 / 清仓</h3></div><div class="table-wrap" id="sig-sells"></div></div>
+        <div class="panel"><div class="panel-head"><h3>🔍 个股透视 <span class="sub">· 查询某股票被哪些机构持有</span></h3></div>
+          <div class="toolbar"><input class="input" id="sig-stock-q" placeholder="输入代码/公司名，如 AAPL、ALPHABET、BABA"><button class="btn primary" id="sig-stock-btn">查询</button></div>
+          <div class="table-wrap" id="sig-stock"></div>
+        </div>
+      </div>
+      <div class="panel"><div class="panel-head"><h3>📋 A 股今日关注 <span class="sub">· 13F 共识 × 北向/龙虎榜/连板 联动（quantskills 式行动清单）</span></h3></div>
+        <div class="grid-3" id="sig-domestic"></div>
+      </div>
+    </section>
+
+    <!-- 国内动向 -->
+    <section id="page-domestic" class="page" hidden>
+      <div class="tabs" id="dom-tabs">
+        <button class="tab active" data-tab="billboard">🐉 龙虎榜</button>
+        <button class="tab" data-tab="hkt">🌊 沪深港通资金</button>
+        <button class="tab" data-tab="holders">🏦 十大流通股东</button>
+        <button class="tab" data-tab="ztpool">🔥 涨停池</button>
+      </div>
+      <div class="panel" id="dom-billboard">
+        <div class="toolbar">
+          <select class="input sel" id="bb-date"></select>
+          <input class="input" id="bb-search" placeholder="搜索代码/名称…">
+          <span class="hint" id="bb-meta"></span>
+        </div>
+        <div class="table-wrap" id="bb-table"></div>
+      </div>
+      <div class="panel" id="dom-hkt" hidden>
+        <div class="toolbar"><span class="hint">北向资金 = 沪股通 + 深股通 每日净买入（亿元）</span></div>
+        <div class="chart-box tall"><canvas id="hkt-chart"></canvas></div>
+        <div class="table-wrap" id="hkt-table"></div>
+      </div>
+      <div class="panel" id="dom-holders" hidden>
+        <div class="toolbar">
+          <input class="input" id="wl-code" placeholder="6位代码" style="width:110px">
+          <input class="input" id="wl-name" placeholder="名称" style="width:120px">
+          <button class="btn primary static-hide" id="wl-add">+ 自选股</button>
+          <div class="seg" id="holder-type-seg"><button class="seg-btn active" data-t="">全部类型</button></div>
+          <input class="input" id="holder-search" placeholder="搜索股东…">
+        </div>
+        <div class="watch-chips" id="watch-chips"></div>
+        <div class="table-wrap" id="holder-table"></div>
+      </div>
+      <div class="panel" id="dom-ztpool" hidden>
+        <div class="toolbar"><select class="input sel" id="zt-date"></select><span class="hint" id="zt-meta"></span></div>
+        <div class="zt-grid" id="zt-grid"></div>
+      </div>
+    </section>
+
+    <!-- 快讯 -->
+    <section id="page-news" class="page" hidden>
+      <div class="panel">
+        <div class="toolbar">
+          <div class="seg" id="news-seg">
+            <button class="seg-btn active" data-t="">全部</button>
+            <button class="seg-btn" data-t="东财快讯">东财快讯</button>
+            <button class="seg-btn" data-t="新浪7x24">新浪7×24</button>
+            <button class="seg-btn" data-t="matched">⚡ 机构命中</button>
+          </div>
+          <input class="input" id="news-search" placeholder="搜索关键词…">
+        </div>
+        <div class="news-list" id="news-list"></div>
+      </div>
+    </section>
+
+    <!-- 告警 -->
+    <section id="page-alerts" class="page" hidden>
+      <div class="panel">
+        <div class="toolbar">
+          <div class="seg" id="alert-seg">
+            <button class="seg-btn active" data-t="">全部</button>
+            <button class="seg-btn" data-t="holding">13F 变动</button>
+            <button class="seg-btn" data-t="holder">股东异动</button>
+            <button class="seg-btn" data-t="news_kw">关键词</button>
+          </div>
+          <button class="btn ghost static-hide" id="alert-clear">清空记录</button>
+        </div>
+        <div class="alert-list big" id="alert-list"></div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="page-settings" class="page" hidden>
+      <div class="panel static-only">
+        <div class="panel-head"><h3>📡 关于本站</h3></div>
+        <p style="color:var(--muted);font-size:13.5px;line-height:1.9">
+          这是 <b>全球投资机构雷达</b> 的公开数据快照站（只读镜像），样式与功能对齐本地实例：全球 13F 持仓与变动、机构共识信号、个股透视、龙虎榜 / 沪深港通 / 十大流通股东 / 涨停池、7×24 快讯与告警记录均可浏览、筛选与导出 CSV。<br>
+          <b style="color:var(--text)">本地实例</b>额外支持：APScheduler 定时自动爬取更新、实时告警推送（Bark / Server酱 / 飞书 / 钉钉 / Webhook）、桌面通知、机构关注与自选股管理、数据源启停与间隔配置。<br>
+          快照生成时间：<b id="about-built" style="color:var(--text)">…</b> · 部署脚本 <span class="mono">scripts/deploy_pages.sh</span> · 开源地址 <a href="https://github.com/Roloria/institution-radar" target="_blank" rel="noopener">GitHub</a><br>
+          数据来源：SEC EDGAR 13F · 东方财富 · 新浪财经。存在披露时滞，仅供研究学习，不构成投资建议。
+        </p>
+      </div>
+      <div class="static-hide">
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h3>🛰️ 数据源 · 自动更新</h3></div>
+          <div class="src-list" id="src-list"></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>🔔 告警规则</h3></div>
+          <div class="form">
+            <div class="form-row"><label>13F 变动幅度阈值</label><div class="inline"><input class="input num" id="r-13f-pct" type="number"> % 且市值 ≥ <input class="input num" id="r-13f-val" type="number"> 亿美元</div></div>
+            <div class="form-row"><label>股东增减持幅度阈值</label><div class="inline"><input class="input num" id="r-holder-pct" type="number"> %</div></div>
+            <div class="form-row"><label>关注的股东类型</label><div class="checks" id="r-holder-types"></div></div>
+            <div class="form-row"><label>推送最低级别</label>
+              <select class="input sel" id="r-min-level"><option value="info">全部（含普通）</option><option value="important">重要</option><option value="critical">仅关键</option></select></div>
+            <button class="btn primary" id="r-save">保存规则</button>
+          </div>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>📤 推送渠道</h3><span class="sub">配置后新告警自动推送</span></div>
+          <div class="form" id="notify-form"></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>🌐 网络代理</h3><span class="sub">SEC EDGAR 需要代理访问</span></div>
+          <div class="form">
+            <div class="form-row"><label>代理地址</label><input class="input" id="proxy-url" placeholder="http://127.0.0.1:6152"></div>
+            <div class="form-row"><label>启用代理（13F 爬虫）</label><label class="switch"><input type="checkbox" id="proxy-on"><span></span></label></div>
+            <button class="btn primary" id="proxy-save">保存</button>
+          </div>
+        </div>
+      </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="./chart.umd.min.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
